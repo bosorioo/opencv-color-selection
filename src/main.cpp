@@ -5,6 +5,9 @@
 
 #define WINDOW_TITLE_INPUT "Segmentation by color - original image"
 #define WINDOW_TITLE_OUTPUT "Result"
+#define WINDOW_POSITION_X 80
+#define WINDOW_POSITION_Y 20
+#define WINDOW_POSITION_Y_OUTPUT (WINDOW_POSITION_Y + 250)
 #define COLOR_THRESHOLD 13
 
 void showUsage();
@@ -20,6 +23,8 @@ cv::Mat g_imageOutput;
 cv::Vec3b g_clickedPixelColorRGB;
 uint8_t g_clickedPixelColorGray;
 int32_t g_videoFrameCount;
+int32_t g_windowWidth;
+int32_t g_windowHeight;
 
 bool g_isInputImage = false;
 bool g_isInputVideo = false;
@@ -81,9 +86,34 @@ int main(int argc, char** argv)
     double fps = 0.;
     double fpsInv = 0.;
     double secondsSinceLastDraw = 0.;
-    int32_t windowFlags = cv::WINDOW_FULLSCREEN;
+    int32_t windowFlags = cv::WINDOW_KEEPRATIO;
+
+    if (g_isInputImage)
+    {
+        g_windowWidth = g_imageInput.cols;
+        g_windowHeight = g_imageInput.rows;
+    }
+    else if (g_isInputVideo)
+    {
+        g_windowWidth = g_videoCapture.get(cv::CAP_PROP_FRAME_WIDTH);
+        g_windowHeight = g_videoCapture.get(cv::CAP_PROP_FRAME_HEIGHT);
+    }
+
+    int32_t maxWindowSize = 1440;
+
+    if (g_windowWidth > maxWindowSize || g_windowHeight > maxWindowSize)
+    {
+        float ratio = static_cast<float>(std::max(g_windowWidth, g_windowHeight)) / maxWindowSize;
+        g_windowWidth = static_cast<int32_t>(g_windowWidth / ratio);
+        g_windowHeight = static_cast<int32_t>(g_windowHeight / ratio);
+    }
+
+    g_windowWidth = std::max(80, g_windowWidth);
+    g_windowHeight = std::max(80, g_windowHeight);
 
     cv::namedWindow(WINDOW_TITLE_INPUT, windowFlags);
+    cv::resizeWindow(WINDOW_TITLE_INPUT, g_windowWidth, g_windowHeight);
+    cv::moveWindow(WINDOW_TITLE_INPUT, WINDOW_POSITION_X, WINDOW_POSITION_Y);
 
     if (g_isInputVideo)
     {
@@ -120,7 +150,10 @@ int main(int argc, char** argv)
             if (key == 'q' || key == 27)
             {
                 if (isWindowOpen(WINDOW_TITLE_OUTPUT))
+                {
+                    g_hasClicked = false;
                     cv::destroyWindow(WINDOW_TITLE_OUTPUT);
+                }
                 else
                     break;
             }
@@ -149,7 +182,11 @@ int main(int argc, char** argv)
             segmentImageByPixelColor();
 
             if (!isWindowOpen(WINDOW_TITLE_OUTPUT))
+            {
                 cv::namedWindow(WINDOW_TITLE_OUTPUT, windowFlags);
+                cv::resizeWindow(WINDOW_TITLE_OUTPUT, g_windowWidth, g_windowHeight);
+                cv::moveWindow(WINDOW_TITLE_OUTPUT, WINDOW_POSITION_X, WINDOW_POSITION_Y_OUTPUT);
+            }
 
             cv::imshow(WINDOW_TITLE_OUTPUT, g_imageOutput);
         }

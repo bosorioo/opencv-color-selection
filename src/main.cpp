@@ -1,6 +1,8 @@
 #include <opencv2/opencv.hpp>
 #include <fstream>
 #include <cstdio>
+#include <chrono>
+#include <thread>
 #include "Clock.h"
 
 #define WINDOW_TITLE_INPUT "Segmentation by color - original image"
@@ -54,11 +56,42 @@ int main(int argc, char** argv)
     }
     else if (args[1] == "cam" || args[1] == "webcam")
     {
-        g_videoCapture.open(0);
+        g_videoCapture = cv::VideoCapture(0);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
 
-        if (!g_videoCapture.isOpened())
+        if (g_videoCapture.isOpened())
         {
             printf("Failed to open webcam for reading.\n");
+            return 0;
+        }
+
+        g_isInputVideo = true;
+        g_videoCapture.grab();
+        g_videoCapture.retrieve(g_imageInput);
+
+        int32_t grabAttempts = 0;
+        bool grabbed = true;
+
+        while (grabAttempts-- > 0)
+        {
+            grabbed = g_videoCapture.grab();
+
+            if (grabbed)
+                break;
+
+            printf("Failed to grab webcam frame.\n");
+
+            if (grabAttempts > 0)
+            {
+                printf("Trying again in 1.5 seconds...\n");
+                std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+            }
+        }
+
+        if (!grabbed)
+        {
+            g_videoCapture.release();
+            printf("Failed to read data from the camera.\n");
             return 0;
         }
     }
@@ -120,13 +153,16 @@ int main(int argc, char** argv)
         fps = g_videoCapture.get(cv::CAP_PROP_FPS);
         fpsInv = 1. / 20.;
 
-        if (fps >= 0.)
+        if (fps > 0.)
+        {
             fpsInv = 1. / fps;
-
-        printf("Video fps: %.3f\n", fps);
+            printf("Video fps: %.3f\n", fps);
+        }
     }
 
-    cv::imshow(WINDOW_TITLE_INPUT, g_imageInput);
+    if (g_imageInput.rows > 0 && g_imageInput.cols > 0)
+        cv::imshow(WINDOW_TITLE_INPUT, g_imageInput);
+
     cv::setMouseCallback(WINDOW_TITLE_INPUT, onMouseEvent);
 
     Clock clock;
@@ -168,7 +204,9 @@ int main(int argc, char** argv)
             {
                 secondsSinceLastDraw -= fpsInv;
                 g_videoCapture.read(g_imageInput);
-                cv::imshow(WINDOW_TITLE_INPUT, g_imageInput);
+
+                if (g_imageInput.rows > 0 && g_imageInput.cols > 0)
+                    cv::imshow(WINDOW_TITLE_INPUT, g_imageInput);
 
                 if (g_hasClicked)
                     g_renderOutput = true;
@@ -247,6 +285,9 @@ void onMouseEvent(int32_t event, int32_t x, int32_t y, int32_t flags, void* user
 {
     if (event == cv::EVENT_LBUTTONDOWN)
     {
+        if (x < 0 || x >= g_imageInput.cols || y < 0 || y >= g_imageInput.rows)
+            return;
+
         g_mouseClickPoint = cv::Point(x, y);
         g_hasClicked = true;
         g_renderOutput = true;

@@ -10,6 +10,7 @@
 #define WINDOW_POSITION_X 80
 #define WINDOW_POSITION_Y 20
 #define WINDOW_POSITION_Y_OUTPUT (WINDOW_POSITION_Y + 250)
+#define WINDOW_FLAGS cv::WINDOW_KEEPRATIO
 #define COLOR_THRESHOLD 13
 
 void showUsage();
@@ -56,35 +57,35 @@ int main(int argc, char** argv)
     }
     else if (args[1] == "cam" || args[1] == "webcam")
     {
-        g_videoCapture = cv::VideoCapture(0);
+        g_videoCapture.open(0);
         std::this_thread::sleep_for(std::chrono::seconds(1));
 
-        if (g_videoCapture.isOpened())
+        if (!g_videoCapture.isOpened())
         {
             printf("Failed to open webcam for reading.\n");
             return 0;
         }
 
         g_isInputVideo = true;
-        g_videoCapture.grab();
-        g_videoCapture.retrieve(g_imageInput);
+        bool grabbed = g_videoCapture.grab();
 
-        int32_t grabAttempts = 0;
-        bool grabbed = true;
-
-        while (grabAttempts-- > 0)
+        if (!grabbed)
         {
-            grabbed = g_videoCapture.grab();
-
-            if (grabbed)
-                break;
-
-            printf("Failed to grab webcam frame.\n");
-
-            if (grabAttempts > 0)
+            int32_t grabAttempts = 3;
+            while (grabAttempts-- > 0)
             {
-                printf("Trying again in 1.5 seconds...\n");
-                std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+                grabbed = g_videoCapture.grab();
+
+                if (grabbed)
+                    break;
+
+                printf("Failed to grab webcam frame.\n");
+
+                if (grabAttempts > 0)
+                {
+                    printf("Trying again in 1.5 seconds...\n");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+                }
             }
         }
 
@@ -94,6 +95,8 @@ int main(int argc, char** argv)
             printf("Failed to read data from the camera.\n");
             return 0;
         }
+
+        g_videoCapture.retrieve(g_imageInput);
     }
     else
     {
@@ -119,7 +122,7 @@ int main(int argc, char** argv)
     double fps = 0.;
     double fpsInv = 0.;
     double secondsSinceLastDraw = 0.;
-    int32_t windowFlags = cv::WINDOW_KEEPRATIO;
+    int32_t windowFlags = WINDOW_FLAGS;
 
     if (g_isInputImage)
     {
@@ -151,7 +154,7 @@ int main(int argc, char** argv)
     if (g_isInputVideo)
     {
         fps = g_videoCapture.get(cv::CAP_PROP_FPS);
-        fpsInv = 1. / 20.;
+        fpsInv = 1. / 15.;
 
         if (fps > 0.)
         {
@@ -174,8 +177,10 @@ int main(int argc, char** argv)
         if (g_isInputVideo)
         {
             float delta = clock.restart();
+
             if (!g_isVideoPaused)
                 secondsSinceLastDraw += delta;
+
             delay = static_cast<int32_t>((fpsInv - secondsSinceLastDraw) * 1000.f) >> 1;
         }
 
@@ -193,16 +198,23 @@ int main(int argc, char** argv)
                 else
                     break;
             }
-
-            if (key == ' ')
+            else if (key == ' ')
                 g_isVideoPaused = !g_isVideoPaused;
         }
 
         if (g_isInputVideo)
         {
-            if (secondsSinceLastDraw >= fpsInv)
+            if (!isWindowOpen(WINDOW_TITLE_INPUT))
             {
-                secondsSinceLastDraw -= fpsInv;
+                break;
+            }
+            else if (secondsSinceLastDraw >= fpsInv)
+            {
+                if (secondsSinceLastDraw > fpsInv * 1.5)
+                    secondsSinceLastDraw = -2. * fpsInv;
+                else
+                    secondsSinceLastDraw -= fpsInv;
+
                 g_videoCapture.read(g_imageInput);
 
                 if (g_imageInput.rows > 0 && g_imageInput.cols > 0)
@@ -350,5 +362,5 @@ void segmentImageByPixelColor()
 
 bool isWindowOpen(const char* windowName)
 {
-    return cv::getWindowProperty(windowName, cv::WND_PROP_VISIBLE) != 0.;
+    return cv::getWindowProperty(windowName, WINDOW_FLAGS) >= 0.;
 }

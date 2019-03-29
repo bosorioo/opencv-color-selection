@@ -362,5 +362,9 @@ void segmentImageByPixelColor()
 
 bool isWindowOpen(const char* windowName)
 {
-    return cv::getWindowProperty(windowName, WINDOW_FLAGS) >= 0.;
+    try {
+        return cv::getWindowProperty(windowName, WINDOW_FLAGS) >= 0.;
+    } catch (...) {
+        return false;
+    }
 }
